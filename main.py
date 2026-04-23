@@ -2,7 +2,7 @@ import numpy as np
 import os
 import re
 
-# Imports de tes modules personnalisés
+
 from northwest import solve_north_west_corner
 from balas_hammer import solve_balas_hammer
 from display_utils import display_all_tables
@@ -31,7 +31,7 @@ def run_analysis(file_name, file_path):
     n, m, costs, provisions, orders = load_table(file_path)
     
     print(f"\n{'#'*60}")
-    print(f" ANALYSE DU FICHIER : {file_name}")
+    print(f" ANALYSE OF THE FILE SELECTED : {file_name}")
     print(f"{'#'*60}")
 
     
@@ -54,7 +54,7 @@ def run_analysis(file_name, file_path):
     
 
 
-    #4 tables (Costs, Alloc, Potentials, Marginals)
+    # tables (Costs, Alloc, Potentials, Marginals)
     display_all_tables(f"{file_name} ({method_name})", n, m, costs, allocation)
 
 
