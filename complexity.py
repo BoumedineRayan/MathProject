@@ -49,27 +49,47 @@ def calculate_time_complexity_balas_hammer(size: int, costs: np.ndarray, provisi
     
     
 def main():
+    EXPORT_TO_CSV = False  
+
     delta_NW_list = []
     delta_BH_list = []
     sizeOfMatrix = int(input("Enter the size of the squared matrix: "))
     filename = f"benchmarks_{sizeOfMatrix}x{sizeOfMatrix}.csv"
-    with open(filename, mode='w', newline='') as f:
+    f = None
+    writer = None
+    
+    if EXPORT_TO_CSV:
+        f = open(filename, mode='w', newline='')
         writer = csv.writer(f)
         writer.writerow(["Iteration", "Northwest_Time", "Balas_Hammer_Time"])
-    
-    
+
+    try:
         for i in range(100):
             matrix_A = generate_random_matrix(sizeOfMatrix)
             Pi, Cj = calculate_provisions_and_orders(generate_random_matrix(sizeOfMatrix))
+            
             delta_NW = calculate_time_complexity_northwest(sizeOfMatrix, Pi, Cj)
-            print(f"Time taken to execute the Northwest Corner method for a matrix of size {sizeOfMatrix}x{sizeOfMatrix}: {delta_NW} seconds")
+            print(f"Iteration {i+1} - NW: {delta_NW}s")
+            
             delta_BH = calculate_time_complexity_balas_hammer(sizeOfMatrix, matrix_A, Pi, Cj)
-            print(f"Time taken to execute the Balas-Hammer method for a matrix of size {sizeOfMatrix}x{sizeOfMatrix}: {delta_BH} seconds")
+            print(f"Iteration {i+1} - BH: {delta_BH}s")
+            
             delta_NW_list.append(delta_NW)
             delta_BH_list.append(delta_BH)
-            print(f"Iteration {i + 1} completed.")
-            writer.writerow([i + 1, delta_NW, delta_BH])
+            
+            if EXPORT_TO_CSV and writer:
+                writer.writerow([i + 1, delta_NW, delta_BH])
+                
+        print("-" * 30)
+        avg_nw = np.mean(delta_NW_list)
+        avg_bh = np.mean(delta_BH_list)
         print(f"Moyenne NW: {avg_nw:.6f} s")        
         print(f"Moyenne BH: {avg_bh:.6f} s")
-        print(f"Données enregistrées dans : {filename}")
+        
+        if EXPORT_TO_CSV:
+            print(f"Données enregistrées dans : {filename}")
+
+    finally:
+        if f:
+            f.close()
 main()
