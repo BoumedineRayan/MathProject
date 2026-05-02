@@ -1,95 +1,82 @@
 import numpy as np
+import pandas as pd
 import time
-import csv
+import os
+from SS import solve_stepping_stone # Ta version avec Numba
 from ballas import solve_balas_hammer_fast
-from northwest import solve_north_west_corner
+from NW import solve_north_west_corner
 
+def generate_data(size):
+    costs = np.random.randint(1, 101, (size, size)).astype(np.float64)
+    # Pour garantir l'équilibre Offre/Demande :
+    Pi = np.random.randint(10, 100, size).astype(np.float64)
+    Cj = np.random.randint(10, 100, size).astype(np.float64)
+    # Ajustement pour équilibre parfait
+    diff = np.sum(Pi) - np.sum(Cj)
+    Cj[-1] += diff 
+    return costs, Pi, Cj
 
+def run_benchmarks():
+    sizes = [10, 40, 100, 400, 1000, 4000, 10000]
+    iterations = 100
 
-def generate_random_matrix(size: int) -> np.ndarray:
-    return np.random.randint(0, 101, (size, size))
-
-
-def calculate_provisions_and_orders(matrix: np.ndarray) -> tuple:
-    Pi = np.sum(matrix, axis=1)
-    Cj = np.sum(matrix, axis=0)
-    return Pi, Cj
-
-
-def calculate_time_complexity_northwest(size: int, provisions: np.ndarray, orders: np.ndarray) -> float:
-    '''Calculate the time complexity of the Northwest Corner method.
-    
-    Args:        
-        size (int): The size of the squared matrix.
-        provisions (list): A list containing the provisions for each row.
-        orders (list): A list containing the orders for each column.
-    Returns:
-        float: The time taken to execute the Northwest Corner method in seconds.
-    '''
-    time_start = time.perf_counter()
-    solve_north_west_corner(size, size, provisions, orders)
-    time_end = time.perf_counter()
-    return time_end - time_start
-
-def calculate_time_complexity_balas_hammer(size: int, costs: np.ndarray, provisions: np.ndarray, orders: np.ndarray) -> float:
-    '''Calculate the time complexity of the Balas-Hammer method.
-    
-    Args:        
-        size (int): The size of the squared matrix.
-        costs (list): A squared matrix containing the costs for each cell.
-        provisions (list): A list containing the provisions for each row.
-        orders (list): A list containing the orders for each column.
-    Returns:
-        float: The time taken to execute the Balas-Hammer method in seconds.
-    '''
-    time_start = time.perf_counter()
-    testo = solve_balas_hammer_fast(costs, provisions, orders)
-    time_end = time.perf_counter()
-    return time_end - time_start
-    
-    
-def main():
-    EXPORT_TO_CSV = False  
-
-    delta_NW_list = []
-    delta_BH_list = []
-    sizeOfMatrix = int(input("Enter the size of the squared matrix: "))
-    filename = f"benchmarks_{sizeOfMatrix}x{sizeOfMatrix}.csv"
-    f = None
-    writer = None
-    
-    if EXPORT_TO_CSV:
-        f = open(filename, mode='w', newline='')
-        writer = csv.writer(f)
-        writer.writerow(["Iteration", "Northwest_Time", "Balas_Hammer_Time"])
-
-    try:
-        for i in range(100):
-            matrix_A = generate_random_matrix(sizeOfMatrix)
-            Pi, Cj = calculate_provisions_and_orders(generate_random_matrix(sizeOfMatrix))
-            
-            delta_NW = calculate_time_complexity_northwest(sizeOfMatrix, Pi, Cj)
-            print(f"Iteration {i+1} - NW: {delta_NW}s")
-            
-            delta_BH = calculate_time_complexity_balas_hammer(sizeOfMatrix, matrix_A, Pi, Cj)
-            print(f"Iteration {i+1} - BH: {delta_BH}s")
-            
-            delta_NW_list.append(delta_NW)
-            delta_BH_list.append(delta_BH)
-            
-            if EXPORT_TO_CSV and writer:
-                writer.writerow([i + 1, delta_NW, delta_BH])
-                
-        print("-" * 30)
-        avg_nw = np.mean(delta_NW_list)
-        avg_bh = np.mean(delta_BH_list)
-        print(f"Moyenne NW: {avg_nw:.6f} s")        
-        print(f"Moyenne BH: {avg_bh:.6f} s")
+    for s in sizes:
+        filename = f"benchmarks_{s}x{s}.csv"
+        results = []
         
-        if EXPORT_TO_CSV:
-            print(f"Données enregistrées dans : {filename}")
+        # Si le fichier existe, on le charge pour voir où on s'est arrêté
+        start_iter = 0
+        if os.path.exists(filename):
+            df_old = pd.read_csv(filename)
+            if len(df_old) >= iterations:
+                print(f"✅ {filename} déjà complet. Passage au suivant.")
+                continue
+            start_iter = len(df_old)
+            results = df_old.to_dict('records')
 
-    finally:
-        if f:
-            f.close()
-main()
+        print(f"\n🚀 Lancement Taille {s}x{s} ({start_iter} -> {iterations})")
+
+        for i in range(start_iter, iterations):
+            costs, Pi, Cj = generate_data(s)
+            
+            # 1. NORTHWEST
+            t0 = time.perf_counter()
+            alloc_nw = solve_north_west_corner(s, s, Pi, Cj)
+            t_nw = time.perf_counter() - t0
+            
+            # 2. BALAS HAMMER
+            t0 = time.perf_counter()
+            alloc_bh = solve_balas_hammer_fast(costs, Pi, Cj)
+            t_bh = time.perf_counter() - t0
+            
+            # 3. SS (Northwest)
+            t_ss_nw = 0
+            t0 = time.perf_counter()
+            solve_stepping_stone(s, s, costs, alloc_nw, verbose=False)
+            t_ss_nw = time.perf_counter() - t0
+            
+            # 4. SS (Ballas Hammer)
+            t0 = time.perf_counter()
+            solve_stepping_stone(s, s, costs, alloc_bh, verbose=False)
+            t_ss_bh = time.perf_counter() - t0
+            
+            res = {
+                "Iteration": i + 1,
+                "Northwest_Time": t_nw,
+                "Balas_Hammer_Time": t_bh,
+                "SS_NorthWest_Time": t_ss_nw,
+                "SS_BallasHammer_Time": t_ss_bh,
+                "Total_NorthWest_Time": t_nw + t_ss_nw,
+                "Total_BallasHammer_Time": t_bh + t_ss_bh
+            }
+            results.append(res)
+            
+            if (i+1) % 5 == 0:
+                print(f"   Iter {i+1}/100 terminée...")
+                # Sauvegarde intermédiaire
+                pd.DataFrame(results).to_csv(filename, index=False)
+
+        pd.DataFrame(results).to_csv(filename, index=False)
+        print(f"💾 {filename} sauvegardé.")
+
+run_benchmarks()

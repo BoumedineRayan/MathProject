@@ -1,83 +1,76 @@
 import numpy as np
+from numba import njit, prange
 
+@njit
 def solve_balas_hammer_fast(costs, provisions, orders):
-    costs = np.array(costs, dtype=float)
-    supply = np.array(provisions, dtype=float)
-    demand = np.array(orders, dtype=float)
     n, m = costs.shape
-    allocation = np.zeros((n, m))
-
-    # 1. Pré-tri des indices pour éviter de chercher le min à chaque itération
-    # On stocke les indices des colonnes triées par coût pour chaque ligne
-    row_sorted_indices = [list(np.argsort(costs[i, :])) for i in range(n)]
-    # On stocke les indices des lignes triées par coût pour chaque colonne
-    col_sorted_indices = [list(np.argsort(costs[:, j])) for j in range(m)]
-
-    row_active = np.ones(n, dtype=bool)
-    col_active = np.ones(m, dtype=bool)
+    supply = provisions.copy().astype(np.float64)
+    demand = orders.copy().astype(np.float64)
+    allocation = np.zeros((n, m), dtype=np.float64)
+    
+    row_active = np.ones(n, dtype=np.bool_)
+    col_active = np.ones(m, dtype=np.bool_)
 
     while np.any(row_active) and np.any(col_active):
-        max_penalty = -1
-        best_type = None
+        max_penalty = -1.0
         best_idx = -1
+        is_row = True
 
-        # --- CALCUL DES PÉNALITÉS ---
-        
-        # Pour chaque ligne active
+        # Penalités lignes
         for i in range(n):
-            if not row_active[i]: continue
-            # Nettoyer les indices des colonnes qui ne sont plus actives
-            while row_sorted_indices[i] and not col_active[row_sorted_indices[i][0]]:
-                row_sorted_indices[i].pop(0)
-            
-            indices = row_sorted_indices[i]
-            if len(indices) >= 2:
-                p = costs[i, indices[1]] - costs[i, indices[0]]
-            elif len(indices) == 1:
-                p = costs[i, indices[0]]
-            else:
-                p = -1
-            
-            if p > max_penalty:
-                max_penalty, best_type, best_idx = p, 'row', i
+            if row_active[i]:
+                first, second = 1e18, 1e18
+                count = 0
+                for j in range(m):
+                    if col_active[j]:
+                        count += 1
+                        val = costs[i, j]
+                        if val < first:
+                            second = first
+                            first = val
+                        elif val < second:
+                            second = val
+                penalty = second - first if count > 1 else first
+                if penalty > max_penalty:
+                    max_penalty, best_idx, is_row = penalty, i, True
 
-        # Pour chaque colonne active
+        # Penalités colonnes
         for j in range(m):
-            if not col_active[j]: continue
-            # Nettoyer les indices des lignes qui ne sont plus actives
-            while col_sorted_indices[j] and not row_active[col_sorted_indices[j][0]]:
-                col_sorted_indices[j].pop(0)
-            
-            indices = col_sorted_indices[j]
-            if len(indices) >= 2:
-                p = costs[indices[1], j] - costs[indices[0], j]
-            elif len(indices) == 1:
-                p = costs[indices[0], j]
-            else:
-                p = -1
-                
-            if p > max_penalty:
-                max_penalty, best_type, best_idx = p, 'col', j
+            if col_active[j]:
+                first, second = 1e18, 1e18
+                count = 0
+                for i in range(n):
+                    if row_active[i]:
+                        count += 1
+                        val = costs[i, j]
+                        if val < first:
+                            second = first
+                            first = val
+                        elif val < second:
+                            second = val
+                penalty = second - first if count > 1 else first
+                if penalty > max_penalty:
+                    max_penalty, best_idx, is_row = penalty, j, False
 
-        if best_idx == -1: break
-
-        # --- ALLOCATION ---
-        
-        if best_type == 'row':
+        # Allocation
+        if is_row:
             i = best_idx
-            j = row_sorted_indices[i][0]
+            min_val, j = 1e18, -1
+            for jj in range(m):
+                if col_active[jj] and costs[i, jj] < min_val:
+                    min_val, j = costs[i, jj], jj
         else:
             j = best_idx
-            i = col_sorted_indices[j][0]
+            min_val, i = 1e18, -1
+            for ii in range(n):
+                if row_active[ii] and costs[ii, j] < min_val:
+                    min_val, i = costs[ii, j], ii
 
-        quantity = min(supply[i], demand[j])
-        allocation[i, j] = quantity
-        supply[i] -= quantity
-        demand[j] -= quantity
-
-        if supply[i] <= 1e-9: # Utilisation d'un epsilon pour les flottants
-            row_active[i] = False
-        if demand[j] <= 1e-9:
-            col_active[j] = False
+        q = min(supply[i], demand[j])
+        allocation[i, j] = q
+        supply[i] -= q
+        demand[j] -= q
+        if supply[i] <= 1e-9: row_active[i] = False
+        if demand[j] <= 1e-9: col_active[j] = False
 
     return allocation
