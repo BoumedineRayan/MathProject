@@ -148,6 +148,30 @@ def solve_stepping_stone(n, m, costs, allocation, verbose=True):
         
         # 3. Calculate potentials
         u, v = get_potentials(n, m, costs, basis)
+
+        if verbose:
+            print(f"    -> Vector of U (Line Potentials)   : {u}")
+            print(f"    -> Vector of V (Column Potentials) : {v}")
+            
+            print("\n    -> Matrix of Marginal Costs (Δij = Cij - Ui - Vj) :")
+            # Column header
+            print("      ", end="")
+            for j in range(m):
+                print(f" C{j+1:<4}", end="")
+            print()
+            
+            # Matrix rows
+            for r in range(n):
+                print(f"   P{r+1:<2} ", end="")
+                for c in range(m):
+                    if (r, c) in basis:
+                        # We display a symbol for the basis cells (marginal cost = 0)
+                        print("  --- ", end="")
+                    else:
+                        marg = costs[r][c] - (u[r] + v[c])
+                        # Strict formatting: >5 means "right-aligned over 5 characters"
+                        print(f"{marg:>5.0f} ", end="")
+                print()
         
         # 4. Identify best marginal cost
         best_marg = 0
