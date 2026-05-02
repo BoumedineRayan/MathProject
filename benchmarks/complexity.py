@@ -2,16 +2,14 @@ import numpy as np
 import pandas as pd
 import time
 import os
-from SS import solve_stepping_stone # Ta version avec Numba
-from ballas import solve_balas_hammer_fast
-from NW import solve_north_west_corner
+from benchmarks.SS import solve_stepping_stone 
+from benchmarks.ballas import solve_balas_hammer_fast
+from benchmarks.NW import solve_north_west_corner
 
 def generate_data(size):
     costs = np.random.randint(1, 101, (size, size)).astype(np.float64)
-    # Pour garantir l'équilibre Offre/Demande :
     Pi = np.random.randint(10, 100, size).astype(np.float64)
     Cj = np.random.randint(10, 100, size).astype(np.float64)
-    # Ajustement pour équilibre parfait
     diff = np.sum(Pi) - np.sum(Cj)
     Cj[-1] += diff 
     return costs, Pi, Cj
@@ -24,7 +22,6 @@ def run_benchmarks():
         filename = f"benchmarks_{s}x{s}.csv"
         results = []
         
-        # Si le fichier existe, on le charge pour voir où on s'est arrêté
         start_iter = 0
         if os.path.exists(filename):
             df_old = pd.read_csv(filename)
@@ -55,7 +52,6 @@ def run_benchmarks():
             solve_stepping_stone(s, s, costs, alloc_nw, verbose=False)
             t_ss_nw = time.perf_counter() - t0
             
-            # 4. SS (Ballas Hammer)
             t0 = time.perf_counter()
             solve_stepping_stone(s, s, costs, alloc_bh, verbose=False)
             t_ss_bh = time.perf_counter() - t0
@@ -73,7 +69,6 @@ def run_benchmarks():
             
             if (i+1) % 5 == 0:
                 print(f"   Iter {i+1}/100 terminée...")
-                # Sauvegarde intermédiaire
                 pd.DataFrame(results).to_csv(filename, index=False)
 
         pd.DataFrame(results).to_csv(filename, index=False)
